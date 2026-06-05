@@ -25,7 +25,9 @@ phase-isolated coding-agent workflows.
 - Verification and review must be genuinely fresh. Do not pass implementation
   chain-of-thought or full implementation transcript by default.
 - Manual interaction should be reserved for real decisions, destructive actions,
-  blocked scope, or final approval.
+  blocked scope, credentials or permissions, external actions, or final
+  approval. Any pause for user feedback must record the explicit reason human
+  intervention is required.
 - Prefer a small protocol that can be enforced over a broad checklist that can
   be ignored.
 
@@ -43,9 +45,15 @@ phase-isolated coding-agent workflows.
 - Do not add Codex plugin, skill, CLI, or MCP adapter work unless the project
   scope explicitly changes.
 - Store run state in a durable ledger. For Pi-managed runs, Pi custom session
-  entries are authoritative; project-local ledgers are inspectable mirrors
-  namespaced by session, for example
-  `.agent-loop/sessions/<session-id>/run.json`.
+  entries on the active session branch path are authoritative; project-local
+  ledgers are inspectable mirrors namespaced by session, for example
+  `.agent-loop/sessions/pi/<session-id>/run.json`.
+- User-facing commands are only `start`, `stop`, `continue`, and `status`.
+  Users never choose phase transitions directly.
+- `stop` pauses a loop; it does not cancel it. `continue` resumes from
+  reconstructed state.
+- Retro is required before a loop closes and records memory or harness behavior
+  recommendations only. Retro does not modify the repository.
 - Make phase artifacts easy to inspect, diff, and attach to a PR.
 - Avoid hiding important state in extension memory only.
 - Treat project-local Pi agents, prompts, and settings as repository-controlled

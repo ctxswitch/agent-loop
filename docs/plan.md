@@ -20,7 +20,7 @@ The main agent or extension is an orchestrator. It owns:
 
 - The state machine
 - The run ledger
-- The session-to-run binding
+- The session-branch-path-to-run binding
 - Phase transitions
 - Phase packets
 - Subagent launch and handoff
@@ -70,9 +70,11 @@ Required artifact:
 ```json
 {
   "phase": "implementation",
+  "phaseAttemptId": "",
   "changedFiles": [],
   "summary": "",
   "evidenceIds": [],
+  "loopbackPacketIds": [],
   "knownRisks": [],
   "questions": []
 }
@@ -111,6 +113,7 @@ Required artifact:
 ```json
 {
   "phase": "verification",
+  "phaseAttemptId": "",
   "scenarios": [
     {
       "id": "",
@@ -121,7 +124,7 @@ Required artifact:
   ],
   "failures": [],
   "confidence": "",
-  "nextAction": "pass"
+  "result": "pass"
 }
 ```
 
@@ -157,6 +160,7 @@ Required artifact:
 ```json
 {
   "phase": "review",
+  "phaseAttemptId": "",
   "findings": [
     {
       "severity": "P2",
@@ -169,7 +173,7 @@ Required artifact:
   ],
   "waivedFindings": [],
   "summary": "",
-  "nextAction": "pass"
+  "result": "pass"
 }
 ```
 
@@ -206,6 +210,7 @@ Required artifact:
 ```json
 {
   "phase": "close",
+  "phaseAttemptId": "",
   "evidenceComplete": false,
   "status": "",
   "commit": null,
@@ -223,8 +228,8 @@ Exit rule:
 
 Role: process analyst.
 
-Objective: analyze the run and propose improvements that make the next run more
-efficient or accurate.
+Objective: analyze the run and propose memory or harness behavior improvements
+that make the next run more efficient or accurate.
 
 Inputs:
 
@@ -239,16 +244,16 @@ Required artifact:
 ```json
 {
   "phase": "retro",
+  "phaseAttemptId": "",
   "friction": [],
   "toolingGaps": [],
   "promptFailures": [],
-  "proposedFixes": [],
-  "followUpIssues": []
+  "recommendations": []
 }
 ```
 
-Exit rule: retro completes the run after recording durable improvement
-proposals.
+Exit rule: retro closes the run after recording memory or harness behavior
+recommendations. Retro does not modify the repository.
 
 ## Evidence Model
 
@@ -292,6 +297,27 @@ missing. Examples:
 - Close cannot complete unless it references the final diff, verification
   evidence, review result, and final git status evidence.
 
+## Phase Attempts And Loopbacks
+
+Every phase execution is a phase attempt. Failed, interrupted, rejected, or
+superseded attempts remain part of the loop history. The orchestrator must not
+overwrite a previous phase artifact when verification or review routes work back
+to implementation.
+
+Rules:
+
+- `phase_started` creates a new `phaseAttemptId`.
+- `artifact_recorded`, `artifact_rejected`, and `phase_failed` reference exactly
+  one `phaseAttemptId`.
+- `transition_accepted` records the `fromPhaseAttemptId`, the destination phase,
+  the reason, and any packet ids that explain the transition.
+- Verification failures produce defect loopback packets.
+- Review failures produce finding loopback packets.
+- New implementation attempts reference the loopback packet ids that caused
+  them.
+- Retro consumes all phase attempts on the active session branch path, including
+  failed and superseded attempts.
+
 ## State Machine
 
 ```text
@@ -316,17 +342,21 @@ Minimum event stream:
 - `phase_started`
 - `evidence_recorded`
 - `artifact_recorded`
+- `artifact_rejected`
+- `phase_failed`
 - `transition_requested`
 - `transition_accepted`
 - `transition_rejected`
+- `run_paused`
+- `run_continued`
 - `run_closed`
 - `mirror_exported`
 
-Runs are session-specific. In the Pi runtime, an active loop belongs to one Pi
-session, not to the whole project or a global extension process. Starting,
-resuming, stopping, or advancing a loop must use the current session identity to
-select the run. A different Pi session in the same repository can have a
-different active loop without overwriting or advancing the first session's run.
+Runs are scoped to the active branch path inside a Pi session. Starting,
+continuing, stopping, or checking status must reconstruct the active loop by
+walking the current branch path from the session root to the active leaf and
+replaying `agent-loop` custom entries found on that path. Sibling branch paths in
+the same Pi session file must not share active loop state.
 
 For Pi-managed runs, Pi's session JSONL is the authority for active phase state.
 The extension should append compact custom entries for loop starts, phase
@@ -351,11 +381,15 @@ Example:
 {
   "sessionId": "",
   "sessionFile": "",
+  "activeLeafId": "",
+  "sessionBranchPath": [],
   "runId": "",
   "goal": "",
   "phase": "implementation",
   "transitions": [],
   "evidence": [],
+  "phaseAttempts": [],
+  "loopbackPackets": [],
   "implementation": {
     "changedFiles": [],
     "evidenceIds": [],
@@ -385,6 +419,10 @@ The ledger mirror is not a compatibility surface for other hosts. It exists so
 users can inspect, diff, and attach run evidence without reading Pi's session
 files directly.
 
+`transition_accepted` is the only event that advances the loop state. A started
+phase attempt without an accepted transition remains historical context, not the
+current phase.
+
 ## Pi Runtime
 
 Pi is the strongest runtime target because Pi extensions can:
@@ -403,21 +441,36 @@ The extension should use the Pi session manager for:
 - Custom entries for durable extension state.
 - Session lifecycle events for shutdown, start, switch, and fork handling.
 - Branch/tree navigation state recovery.
+- Active leaf lookup and active branch path reconstruction.
 
 The Pi extension should expose a small surface:
 
-- Start a loop from a user goal.
-- Show loop status.
-- Stop or reset a loop.
-- Record evidence through tools.
-- Launch phase subagents.
-- Gate transitions through the ledger.
+- `start`: start a loop from a user goal on the active session branch path.
+- `stop`: pause the active loop.
+- `continue`: resume the orchestrator from the last reconstructed state.
+- `status`: show reconstructed loop status for the active session branch path.
 
 The Pi extension must bind those operations to the current Pi session. Commands
-such as start, status, stop, reset, record, and next should resolve the active
-run through the session id before reading or writing the ledger. The extension
-may expose project-wide discovery of historical sessions, but project-wide
-operations should not implicitly mutate another session's active loop.
+should resolve the active run by replaying custom entries on the active session
+branch path before reading or writing loop state. The extension may expose
+project-wide discovery of historical mirrors, but project-wide operations should
+not implicitly mutate another session branch path's active loop.
+
+Users must never choose phase transitions. There should be no user-facing
+`next`, `transition`, or `record evidence` command. Phase evidence recording and
+state transitions are internal orchestrator operations after child phase
+completion.
+
+Command semantics:
+
+- `start` creates a run only when the active session branch path has no
+  non-closed loop. If a paused or active loop exists, it tells the user to run
+  `continue`.
+- `stop` records a pause. It does not cancel the loop.
+- `continue` resumes from reconstructed state after pause, user feedback, or
+  session interruption. It does not fabricate transitions.
+- `status` reconstructs state from the active branch path and reports the
+  current phase, attempts, pause reason, and closure state.
 
 Manual interaction should be minimal. The extension should not require the user
 to manually advance through every phase.
@@ -449,7 +502,45 @@ Default phase tool policy:
 - Review is read-only by default.
 - Close can read git state and prepare handoff text, but cannot push, publish,
   or create externally visible resources without explicit approval.
-- Retro is read-only except for approved docs or issue creation workflows.
+- Retro is read-only and records memory or harness behavior recommendations. It
+  does not modify the repository.
+
+### Artifact Storage
+
+Loop events are canonical for identity, ordering, and state. Large artifacts can
+live in project-local files referenced by loop events.
+
+Rules:
+
+- Custom entries should keep compact metadata and small structured payloads.
+- Large artifacts should be stored under a path such as
+  `.agent-loop/artifacts/<session-id>/<run-id>/<artifact-id>.json`.
+- Events that reference external artifacts must include `artifactId`,
+  `artifactKind`, `artifactPath`, and `artifactHash`.
+- Missing or hash-mismatched artifact files make evidence incomplete during
+  replay.
+- Historical artifacts from failed and superseded phase attempts must be
+  retained for loopback packets and retro.
+
+### Pause And Human Intervention
+
+Only the orchestrator can pause a loop for user feedback, and every feedback
+pause must record an explicit human intervention reason. A phase agent should
+not pause just because it is uncertain, tests failed, review found a bug, or
+retro has recommendations.
+
+Allowed human intervention reasons:
+
+- `scope_decision`: user must choose behavior or product scope.
+- `destructive_action`: user must approve irreversible or destructive local
+  work.
+- `external_action`: user must do something outside Pi's authority.
+- `credentials_or_permissions`: user must grant access or credentials.
+- `final_approval`: close needs explicit approval before external visibility.
+- `blocked_runtime`: required tool or environment support is unavailable.
+
+Pauses are resumable. `stop` records an intentional pause, and `continue`
+resumes the orchestrator from reconstructed state.
 
 ### Pi Session Lifecycle
 
@@ -467,6 +558,8 @@ Session-specific loops must follow Pi session lifecycle events.
 - On tree branch navigation, derive the active loop from the selected branch's
   custom entries. If a branch has no active loop entry, status should report no
   active loop rather than falling back to another branch.
+- On a branch path with an existing non-closed loop, `start` must refuse to
+  create another loop.
 - On compaction, preserve structured ledger entries outside model context and
   avoid using compacted prose as the source of truth.
 
@@ -541,4 +634,3 @@ agent-loop/
 
 - How much git metadata should be captured automatically?
 - Should close create commits/PRs or only prepare evidence until approved?
-- How should retro proposals become durable issues or docs changes?

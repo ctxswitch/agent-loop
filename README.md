@@ -15,12 +15,14 @@ The loop is:
 Each phase should run as a fresh subagent. The orchestrator owns the state
 machine, prepares a narrow context packet for the phase, launches the subagent,
 records the returned artifact, and decides the next transition.
+Users can start, stop, continue, and inspect status; they never choose phase
+transitions directly.
 
-For the Pi runtime, an active loop is session-specific. A Pi session owns its
-current run, and loop commands must resolve state through that session rather
-than through a single project-wide active run. Durable run ledgers can still live
-inside the project, but Pi-managed ledgers should be mirrors of Pi session state
-and namespaced by session.
+For the Pi runtime, an active loop is scoped to the current branch path inside a
+Pi session. Loop commands must reconstruct state from append-only Pi custom
+entries on that active branch path rather than from one project-wide or
+session-file-wide run. Durable run ledgers can still live inside the project, but
+Pi-managed ledgers are mirrors of Pi session state and are namespaced by session.
 
 The core design principle is artifact exchange instead of chat-history exchange.
 Fresh subagents should receive the goal, relevant repo context, diffs, evidence,
@@ -134,8 +136,7 @@ Outputs:
 
 - Process friction
 - Prompt or tool failures
-- Proposed workflow fixes
-- Candidate docs or automation changes
+- Memory or harness behavior recommendations
 
 ## Transition Rules
 
