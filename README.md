@@ -16,6 +16,12 @@ Each phase should run as a fresh subagent. The orchestrator owns the state
 machine, prepares a narrow context packet for the phase, launches the subagent,
 records the returned artifact, and decides the next transition.
 
+For the Pi runtime, an active loop is session-specific. A Pi session owns its
+current run, and loop commands must resolve state through that session rather
+than through a single project-wide active run. Durable run ledgers can still live
+inside the project, but Pi-managed ledgers should be mirrors of Pi session state
+and namespaced by session.
+
 The core design principle is artifact exchange instead of chat-history exchange.
 Fresh subagents should receive the goal, relevant repo context, diffs, evidence,
 and prior phase outputs. They should not inherit the full implementation
@@ -26,15 +32,16 @@ conversation unless the orchestrator intentionally includes it.
 - `agent-loop-core`: shared schemas, ledger, transition engine, and phase packet
   builder.
 - `pi-agent-loop`: Pi extension that enforces the protocol, launches phase
-  subagents, injects phase prompts, and updates UI/status.
+  agents through child Pi processes, injects phase prompts, and updates
+  UI/status.
 - `codex-agent-loop`: Codex skill plus optional CLI adapter that uses the same
   protocol and ledger.
 
 Pi is the primary runtime target because Pi extensions can register commands and
-tools, subscribe to events, persist state, inject messages, and orchestrate
-subagents. Codex can share the workflow spec and use a CLI-mediated state
-machine, but it does not get the same in-process orchestration from a plain
-skill.
+tools, subscribe to events, persist session state, inject messages, prompt
+through UI, and run extension code that delegates to child Pi processes. Codex
+can share the workflow spec and use a CLI-mediated state machine, but it does
+not get the same host session lifecycle from a plain skill.
 
 ## Phase Overview
 
@@ -148,4 +155,5 @@ retro complete -> done
 ## Current Status
 
 This repository is a design scaffold. The next step is to define the protocol
-schema and minimal phase packet format before implementing the Pi extension.
+schema, evidence schema, session lifecycle behavior, and minimal phase packet
+format before implementing the Pi extension.

@@ -19,6 +19,8 @@ phase-isolated coding-agent workflows.
   are in.
 - Phase subagents receive narrow context packets and return structured
   artifacts.
+- For Pi, phase subagents are child Pi processes through an explicit runner or
+  subagent package, not an assumed built-in extension primitive.
 - Evidence is first-class. Do not rely on prose summaries when a structured
   ledger entry can capture the same fact.
 - Verification and review must be genuinely fresh. Do not pass implementation
@@ -42,15 +44,25 @@ phase-isolated coding-agent workflows.
 - Keep Pi-specific APIs out of the core protocol package.
 - Keep Codex-specific skill wording generated from or aligned with the same
   phase definitions used by Pi.
-- Store run state in a durable ledger, probably `.agent-loop/run.json` for
-  project-local runs.
+- Store run state in a durable ledger. For Pi-managed runs, Pi custom session
+  entries are authoritative; project-local ledgers are inspectable mirrors
+  namespaced by session, for example
+  `.agent-loop/sessions/<session-id>/run.json`.
 - Make phase artifacts easy to inspect, diff, and attach to a PR.
 - Avoid hiding important state in extension memory only.
+- Treat project-local Pi agents, prompts, and settings as repository-controlled
+  code. Automated phase execution should use trusted packaged prompts unless the
+  user explicitly approves project-local overrides.
+- Commit messages should use the user's normal `<action>: <message>` style, for
+  example `docs: clarify Pi session lifecycle`.
 
 ## Validation
 
 - Validate JSON schemas and sample ledgers.
 - Add fixtures for phase transitions.
+- Validate evidence requirements for each transition.
 - Test transition behavior before adding richer Pi UI.
+- For Pi extension work, test session start, resume, switch, fork, and branch
+  recovery behavior.
 - For Pi extension work, prefer small local package tests before installing into
   a global Pi configuration.
