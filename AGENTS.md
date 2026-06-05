@@ -9,9 +9,8 @@ phase-isolated coding-agent workflows.
 - Treat each workflow phase as a fresh subagent, not a role-played mode inside
   one long conversation.
 - Exchange structured artifacts between phases instead of raw chat history.
-- Keep the core workflow protocol portable across Pi and Codex.
 - Use Pi extensions for strong runtime orchestration.
-- Use Codex skills and an optional CLI adapter for cross-tool compatibility.
+- Keep the current scope focused on Pi extension behavior.
 
 ## Working Principles
 
@@ -35,15 +34,14 @@ phase-isolated coding-agent workflows.
 - `README.md`: short explanation and current status.
 - `docs/plan.md`: design plan and implementation roadmap.
 - `packages/agent-loop-core/`: shared schema, ledger, transition engine, and
-  packet builder.
+  packet builder used by the Pi extension.
 - `packages/pi-agent-loop/`: Pi extension runtime.
-- `packages/codex-agent-loop/`: Codex skill and optional CLI adapter.
 
 ## Design Constraints
 
 - Keep Pi-specific APIs out of the core protocol package.
-- Keep Codex-specific skill wording generated from or aligned with the same
-  phase definitions used by Pi.
+- Do not add Codex plugin, skill, CLI, or MCP adapter work unless the project
+  scope explicitly changes.
 - Store run state in a durable ledger. For Pi-managed runs, Pi custom session
   entries are authoritative; project-local ledgers are inspectable mirrors
   namespaced by session, for example

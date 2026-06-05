@@ -269,7 +269,7 @@ Minimum evidence entry shape:
 }
 ```
 
-Supported MVP evidence kinds:
+Supported evidence kinds:
 
 - `command`: command, cwd, startedAt, endedAt, exitCode, stdoutExcerpt,
   stderrExcerpt, fullOutputPath when output is truncated, and toolCallId when
@@ -307,8 +307,20 @@ retro complete -> done
 
 ## Run Ledger
 
-The run ledger is the portable data model for a run. It should be structured and
-durable. The authoritative storage location depends on the host runtime.
+The run ledger is the structured data model for a Pi-managed run. It should be
+durable, inspectable, and reconstructable from append-only events.
+
+Minimum event stream:
+
+- `run_started`
+- `phase_started`
+- `evidence_recorded`
+- `artifact_recorded`
+- `transition_requested`
+- `transition_accepted`
+- `transition_rejected`
+- `run_closed`
+- `mirror_exported`
 
 Runs are session-specific. In the Pi runtime, an active loop belongs to one Pi
 session, not to the whole project or a global extension process. Starting,
@@ -324,9 +336,9 @@ first.
 
 The project mirror should still live in the repository so it is easy to inspect,
 diff, or attach to a PR. It must be namespaced by session. A default shape such
-as `.agent-loop/sessions/<session-id>/run.json` is preferable to a single
-`.agent-loop/run.json` for Pi-managed runs. Shared project-level indexes or
-summaries may exist, but they must not be the authority for phase state.
+as `.agent-loop/sessions/pi/<session-id>/run.json` is preferable to a single
+`.agent-loop/run.json`. Shared project-level indexes or summaries may exist, but
+they must not be the authority for phase state.
 
 When Pi restores a session, the extension should rebuild in-memory loop state
 from the session entries and then refresh the project mirror. If the session
@@ -369,9 +381,9 @@ Example:
 }
 ```
 
-The ledger should be inspectable and portable. For non-Pi adapters that do not
-have a host session identity, a CLI-provided run id or explicit ledger path can
-serve the same scoping role.
+The ledger mirror is not a compatibility surface for other hosts. It exists so
+users can inspect, diff, and attach run evidence without reading Pi's session
+files directly.
 
 ## Pi Runtime
 
@@ -413,7 +425,7 @@ to manually advance through every phase.
 ### Pi Subagent Execution
 
 The Pi runtime must not assume that "subagent" is a native extension primitive.
-The MVP should implement a `PhaseAgentRunner` adapter backed by child Pi
+The extension should implement a `PhaseAgentRunner` adapter backed by child Pi
 processes. The preferred backend is an installed Pi subagent package that runs
 normal child `pi` invocations. If that package is not available, the adapter can
 fall back to an explicit child-process wrapper with the same contract.
@@ -493,29 +505,6 @@ Package policy:
 - Pre-release checks should include package tests, type checking, linting,
   security audit for production dependencies, and a package dry run.
 
-## Codex Crossover
-
-Codex should share the protocol, not the Pi runtime.
-
-Portable pieces:
-
-- Phase definitions
-- Evidence schemas
-- Transition rules
-- Prompt packets
-- Review principles
-
-Codex adapter options:
-
-- A Codex skill generated from the same phase definitions.
-- A CLI tool, `agent-loop`, that stores the same ledger and exposes commands
-  like `start`, `status`, `record`, `next`, and `close`.
-- Repo-local guidance in `AGENTS.md` that tells Codex to use the CLI-backed
-  protocol when available.
-
-Codex will not get Pi's in-process subagent orchestration from a plain skill.
-If real enforcement is needed, Codex needs an external adapter such as the CLI.
-
 ## Package Structure
 
 Target structure:
@@ -532,6 +521,7 @@ agent-loop/
       src/
         schema.ts
         ledger.ts
+        events.ts
         transitions.ts
         packets.ts
     pi-agent-loop/
@@ -545,37 +535,10 @@ agent-loop/
         review.md
         close.md
         retro.md
-    codex-agent-loop/
-      package.json
-      skills/
-        agent-loop/
-          SKILL.md
-      bin/
-        agent-loop
 ```
-
-## MVP
-
-1. Define the ledger schema and phase artifact schemas.
-2. Define the evidence schema and transition evidence requirements.
-3. Implement transition validation in `agent-loop-core`.
-4. Build sample phase packets from fixtures.
-5. Build a Pi extension with one command to start a session-bound run.
-6. Persist run events as Pi custom session entries and mirror them to
-   `.agent-loop/sessions/<session-id>/run.json`.
-7. Implement session start, shutdown, switch, fork, and branch recovery.
-8. Implement `PhaseAgentRunner` around child Pi process delegation.
-9. Launch implementation as the first fresh phase agent.
-10. Record implementation artifact and advance to verification.
-11. Add verification and review loops.
-12. Add close and retro artifacts.
-13. Generate or maintain a Codex skill from the same phase definitions.
-14. Add a CLI adapter only after the core protocol stabilizes.
 
 ## Open Questions
 
 - How much git metadata should be captured automatically?
 - Should close create commits/PRs or only prepare evidence until approved?
 - How should retro proposals become durable issues or docs changes?
-- What is the minimal Codex adapter that gives useful enforcement without
-  recreating Pi's extension runtime?

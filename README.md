@@ -30,18 +30,16 @@ conversation unless the orchestrator intentionally includes it.
 ## Intended Shape
 
 - `agent-loop-core`: shared schemas, ledger, transition engine, and phase packet
-  builder.
+  builder used by the Pi extension.
 - `pi-agent-loop`: Pi extension that enforces the protocol, launches phase
   agents through child Pi processes, injects phase prompts, and updates
   UI/status.
-- `codex-agent-loop`: Codex skill plus optional CLI adapter that uses the same
-  protocol and ledger.
 
 Pi is the primary runtime target because Pi extensions can register commands and
 tools, subscribe to events, persist session state, inject messages, prompt
-through UI, and run extension code that delegates to child Pi processes. Codex
-can share the workflow spec and use a CLI-mediated state machine, but it does
-not get the same host session lifecycle from a plain skill.
+through UI, and run extension code that delegates to child Pi processes. The
+project intentionally does not target Codex plugins, skills, or CLI adapters in
+the current scope.
 
 ## Phase Overview
 
